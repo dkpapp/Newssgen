@@ -12,6 +12,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from bot.config import Config
 from bot.workers import Worker
 from bot.utils.broadcast import Broadcast
+from bot import screenshots
 
 
 log = logging.getLogger(__name__)
@@ -91,3 +92,26 @@ class ScreenShotBot(Client):
                 await reply_message.edit_text("Broadcast completed")
         except Exception as e:
             log.error(e, exc_info=True)
+
+    # Utility method to generate screenshots and upload results to a chat
+    async def generate_and_send_screenshots(self, chat_id, source, timestamps, mode="Grid"):
+        """Generate screenshots using bot/screenshots.py and send to `chat_id`.
+        mode: 'Grid' or 'Normal' (case-insensitive). Defaults to Grid.
+        timestamps: iterable of seconds
+        source: local path or url readable by ffmpeg
+        """
+        try:
+            # Call the synchronous generator in a thread to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, screenshots.generate_screenshots, source, timestamps, mode)
+
+            if isinstance(result, list):
+                # Normal mode: list of files
+                for path in result:
+                    await self.send_photo(chat_id, path)
+            else:
+                # Grid mode: single file
+                await self.send_photo(chat_id, result)
+        except Exception as e:
+            log.error("Error generating screenshots: %s", e, exc_info=True)
+            await self.send_message(chat_id, str(e))
